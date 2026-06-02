@@ -3,8 +3,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.post import TouristPost
+from app.models.booking import Review, ServiceRequest
 from app.models.listing import GuideListing
+from app.models.post import TouristPost
 from tests.test_authz import auth_headers, make_user
 
 
@@ -79,6 +80,58 @@ async def test_authenticated_tourist_request_appears_in_mine(
     assert requests[0]["tourist_user_id"] == tourist.id
     assert requests[0]["guide_user_id"] == guide.id
     assert requests[0]["tourist_notes"] == "We like history."
+
+
+@pytest.mark.asyncio
+async def test_tourist_requests_include_review_status(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    tourist = await make_user(db_session, email="reviewed-tourist@test.com", role="tourist", display_name="Tourist")
+    guide = await make_user(db_session, email="reviewed-guide@test.com", role="guide", display_name="Guide")
+    reviewed_request = ServiceRequest(
+        tourist_user_id=tourist.id,
+        guide_user_id=guide.id,
+        service_date="2026-06-12",
+        party_size=2,
+        language="en",
+        quoted_amount=100,
+        quoted_currency="CNY",
+        status="met",
+    )
+    unreviewed_request = ServiceRequest(
+        tourist_user_id=tourist.id,
+        guide_user_id=guide.id,
+        service_date="2026-06-13",
+        party_size=2,
+        language="en",
+        quoted_amount=100,
+        quoted_currency="CNY",
+        status="met",
+    )
+    db_session.add_all([reviewed_request, unreviewed_request])
+    await db_session.flush()
+
+    db_session.add(
+        Review(
+            service_request_id=reviewed_request.id,
+            reviewer_user_id=tourist.id,
+            target_user_id=guide.id,
+            stars=5,
+            text="Helpful local context.",
+        )
+    )
+    await db_session.flush()
+
+    mine_resp = await client.get(
+        "/api/v1/service-requests/mine",
+        headers=auth_headers(tourist),
+    )
+
+    assert mine_resp.status_code == 200
+    requests_by_id = {request["id"]: request for request in mine_resp.json()}
+    assert requests_by_id[reviewed_request.id]["has_review"] is True
+    assert requests_by_id[unreviewed_request.id]["has_review"] is False
 
 
 @pytest.mark.asyncio

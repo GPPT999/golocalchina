@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.listing import GuideListing
-from app.models.booking import ServiceRequest
+from app.models.booking import Review, ServiceRequest
 from app.models.user import User
 from app.schemas.service_request import CreateServiceRequest, ServiceRequestResponse
 
@@ -86,14 +86,26 @@ async def list_my_requests(
             select(ServiceRequest).where(ServiceRequest.tourist_user_id == current_user.id)
             .order_by(ServiceRequest.created_at.desc()).limit(50)
         )
+    requests = result.scalars().all()
+    reviewed_request_ids: set[str] = set()
+    if current_user.role == "tourist" and requests:
+        review_result = await db.execute(
+            select(Review.service_request_id).where(
+                Review.reviewer_user_id == current_user.id,
+                Review.service_request_id.in_([r.id for r in requests]),
+            )
+        )
+        reviewed_request_ids = set(review_result.scalars().all())
+
     return [
         {"id": r.id, "tourist_user_id": r.tourist_user_id, "guide_user_id": r.guide_user_id,
          "listing_id": r.listing_id, "service_date": r.service_date,
          "service_time_hour": r.service_time_hour,
          "quoted_amount": float(r.quoted_amount), "quoted_currency": r.quoted_currency,
          "status": r.status, "party_size": r.party_size, "language": r.language,
-         "tourist_notes": r.tourist_notes, "created_at": r.created_at}
-        for r in result.scalars().all()
+         "tourist_notes": r.tourist_notes, "created_at": r.created_at,
+         "has_review": r.id in reviewed_request_ids}
+        for r in requests
     ]
 
 
