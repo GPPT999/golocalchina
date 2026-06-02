@@ -62,10 +62,7 @@ export default function PostsPage() {
 
   const loadLikedPosts = async () => {
     try {
-      const stored = localStorage.getItem('glc_user');
-      if (!stored) return;
-      const u = JSON.parse(stored);
-      const res = await api.get(`/posts/liked?user_id=${u.id}`);
+      const res = await api.get('/posts/liked');
       setLikedPosts(new Set(res.data.liked_post_ids || []));
     } catch (err) {
       console.error('Failed to load liked posts:', err);
@@ -75,7 +72,7 @@ export default function PostsPage() {
   const toggleLike = async (postId: string) => {
     try {
       if (likedPosts.has(postId)) {
-        await api.delete(`/posts/${postId}/like?user_id=${user.id}`);
+        await api.post(`/posts/${postId}/like`);
         setLikedPosts(prev => {
           const next = new Set(prev);
           next.delete(postId);
@@ -85,7 +82,7 @@ export default function PostsPage() {
           p.id === postId ? { ...p, like_count: Math.max(0, (p.like_count || 0) - 1) } : p
         ));
       } else {
-        await api.post(`/posts/${postId}/like?user_id=${user.id}`);
+        await api.post(`/posts/${postId}/like`);
         setLikedPosts(prev => new Set(prev).add(postId));
         setPosts(prev => prev.map(p => 
           p.id === postId ? { ...p, like_count: (p.like_count || 0) + 1 } : p
@@ -107,7 +104,7 @@ export default function PostsPage() {
       return;
     }
     try {
-      await api.post('/posts?author_user_id=' + user.id, {
+      await api.post('/posts', {
         title: newPost.title,
         content: newPost.content,
         images: newPost.images.split(',').map(s => s.trim()).filter(s => s),
@@ -124,7 +121,7 @@ export default function PostsPage() {
 
   const markAsDone = async (postId: string) => {
     try {
-      await api.put(`/posts/${postId}/done?author_user_id=${user.id}`);
+      await api.put(`/posts/${postId}/done`);
       loadPosts();
       setMsg('Post marked as done!');
       setTimeout(() => setMsg(''), 3000);
@@ -136,7 +133,7 @@ export default function PostsPage() {
   const deletePost = async (postId: string) => {
     if (!confirm('Delete this post?')) return;
     try {
-      await api.delete(`/posts/${postId}?author_user_id=${user.id}`);
+      await api.delete(`/posts/${postId}`);
       loadPosts();
       setMsg('Post deleted!');
       setTimeout(() => setMsg(''), 3000);

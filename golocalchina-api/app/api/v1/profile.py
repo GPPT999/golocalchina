@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.user import User, TouristProfile, GuideProfile
 
@@ -30,12 +31,13 @@ class UpdateGuideProfile(BaseModel):
 
 
 @router.get("/me")
-async def get_my_profile(user_id: str, db: AsyncSession = Depends(get_db)):
-    """Get current user's profile. Pass user_id as query param (TODO: from JWT)."""
-    user_result = await db.execute(select(User).where(User.id == user_id))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the authenticated user's profile."""
+    user = current_user
+    user_id = user.id
 
     profile_data = {"id": user.id, "email": user.email, "role": user.role, "locale": user.locale}
 
@@ -61,7 +63,13 @@ async def get_my_profile(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/me/tourist")
-async def update_tourist_profile(user_id: str, req: UpdateTouristProfile, db: AsyncSession = Depends(get_db)):
+async def update_tourist_profile(
+    req: UpdateTouristProfile,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["tourist"])
+    user_id = current_user.id
     result = await db.execute(select(TouristProfile).where(TouristProfile.user_id == user_id))
     tp = result.scalar_one_or_none()
     if not tp:
@@ -73,7 +81,13 @@ async def update_tourist_profile(user_id: str, req: UpdateTouristProfile, db: As
 
 
 @router.put("/me/guide")
-async def update_guide_profile(user_id: str, req: UpdateGuideProfile, db: AsyncSession = Depends(get_db)):
+async def update_guide_profile(
+    req: UpdateGuideProfile,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["guide"])
+    user_id = current_user.id
     result = await db.execute(select(GuideProfile).where(GuideProfile.user_id == user_id))
     gp = result.scalar_one_or_none()
     if not gp:

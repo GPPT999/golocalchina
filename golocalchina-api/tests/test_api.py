@@ -150,12 +150,11 @@ async def test_explore_listing_detail_not_found(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_service_request_unauthenticated(client: AsyncClient):
-    """Creating a service request without proper auth should fail or require params."""
+    """Creating a service request without a bearer token should fail."""
     resp = await client.post("/api/v1/service-requests", json={
         "guide_user_id": "some-id",
         "service_date": "2026-06-01",
         "party_size": 2,
         "language": "en",
     })
-    # Should fail because tourist_user_id is a required query param
-    assert resp.status_code in (400, 422)
+    assert resp.status_code == 401

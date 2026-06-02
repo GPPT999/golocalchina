@@ -18,6 +18,12 @@ import AdBanner from '../components/AdBanner';
 
 const DEFAULT_COVER = '/images/Beijing.jpg';
 
+const initialRequestForm = {
+  service_date: '',
+  party_size: '1',
+  tourist_notes: '',
+};
+
 export default function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -29,6 +35,7 @@ export default function ListingDetailPage() {
   const [sent, setSent] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [requestForm, setRequestForm] = useState(initialRequestForm);
 
   useEffect(() => {
     if (id) {
@@ -54,19 +61,16 @@ export default function ListingDetailPage() {
   const sendRequest = async () => {
     const stored = localStorage.getItem('glc_user');
     if (!stored) { navigate('/login'); return; }
-    const user = JSON.parse(stored);
-    const dateEl = document.querySelector('input[type="date"]') as HTMLInputElement;
-    const sizeEl = document.querySelectorAll('input[type="number"]')[0] as HTMLInputElement;
-    const notesEl = document.querySelector('textarea') as HTMLTextAreaElement;
 
     setSending(true);
     try {
-      await api.post('/service-requests?tourist_user_id=' + user.id, {
+      await api.post('/service-requests', {
         guide_user_id: listing.guide.user_id,
-        service_date: dateEl?.value || new Date().toISOString().split('T')[0],
-        party_size: parseInt(sizeEl?.value || '1'),
+        listing_id: listing.id,
+        service_date: requestForm.service_date || new Date().toISOString().split('T')[0],
+        party_size: parseInt(requestForm.party_size || '1', 10),
         language: 'en',
-        tourist_notes: notesEl?.value || '',
+        tourist_notes: requestForm.tourist_notes,
         quoted_amount: listing.price_amount,
         quoted_currency: listing.price_currency,
       });
@@ -78,21 +82,30 @@ export default function ListingDetailPage() {
     }
   };
 
+  const openConnectDialog = () => {
+    setSent(false);
+    setRequestForm(initialRequestForm);
+    setConnectOpen(true);
+  };
+
+  const updateRequestForm = (field: keyof typeof initialRequestForm, value: string) => {
+    setRequestForm((current) => ({ ...current, [field]: value }));
+  };
+
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const stored = localStorage.getItem('glc_user');
     if (!stored) { navigate('/login'); return; }
-    const user = JSON.parse(stored);
     const likedListings = JSON.parse(localStorage.getItem('glc_liked_listings') || '{}');
     
     try {
       if (liked) {
-        await api.post(`/listings/${id}/unlike?user_id=${user.id}`);
+        await api.post(`/listings/${id}/unlike`);
         delete likedListings[id!];
         setLikeCount(prev => Math.max(0, prev - 1));
       } else {
-        await api.post(`/listings/${id}/like?user_id=${user.id}`);
+        await api.post(`/listings/${id}/like`);
         likedListings[id!] = true;
         setLikeCount(prev => prev + 1);
       }
@@ -186,7 +199,7 @@ export default function ListingDetailPage() {
               </Typography>
               <Button
                 fullWidth variant="contained" size="large"
-                onClick={() => setConnectOpen(true)}
+                onClick={openConnectDialog}
                 sx={{ bgcolor: '#DC2626', py: 1.5, fontSize: '1rem', '&:hover': { bgcolor: '#B91C1C' } }}
               >
                 {t('guide.connect')}
@@ -259,10 +272,33 @@ export default function ListingDetailPage() {
             <>
               <Alert severity="info" sx={{ mb: 2 }}>{t('guide.connect_note')}</Alert>
               <Alert severity="success" sx={{ mb: 2 }} icon={<PaymentsIcon />}>{t('payment.direct_desc')}</Alert>
-              <TextField fullWidth label="Date" type="date" InputLabelProps={{ shrink: true }} sx={{ mb: 2, mt: 1 }} />
-              <TextField fullWidth label="Group size" type="number" defaultValue={1} inputProps={{ min: 1, max: 30 }} sx={{ mb: 2 }} />
-              <TextField fullWidth label="Message to the guide (optional)" multiline rows={3}
-                placeholder="Tell them what you're interested in, any special requests..." />
+              <TextField
+                fullWidth
+                label="Date"
+                type="date"
+                value={requestForm.service_date}
+                onChange={(event) => updateRequestForm('service_date', event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ mb: 2, mt: 1 }}
+              />
+              <TextField
+                fullWidth
+                label="Group size"
+                type="number"
+                value={requestForm.party_size}
+                onChange={(event) => updateRequestForm('party_size', event.target.value)}
+                inputProps={{ min: 1, max: 30 }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Message to the guide (optional)"
+                value={requestForm.tourist_notes}
+                onChange={(event) => updateRequestForm('tourist_notes', event.target.value)}
+                multiline
+                rows={3}
+                placeholder="Tell them what you're interested in, any special requests..."
+              />
             </>
           )}
         </DialogContent>

@@ -1,10 +1,12 @@
 """Service Request endpoints — connection requests."""
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.listing import GuideListing
 from app.models.booking import ServiceRequest
+from app.models.user import User
 from app.schemas.service_request import CreateServiceRequest, ServiceRequestResponse
 
 router = APIRouter(prefix="/service-requests", tags=["service-requests"])
@@ -13,25 +15,41 @@ router = APIRouter(prefix="/service-requests", tags=["service-requests"])
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_service_request(
     req: CreateServiceRequest,
-    tourist_user_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Tourist requests to connect with a guide. Listing is optional."""
+    ensure_role(current_user, ["tourist"])
     quoted = req.quoted_amount or 0
     currency = req.quoted_currency or "CNY"
 
-    # If listing provided, get price from it
+    guide_result = await db.execute(
+        select(User).where(
+            User.id == req.guide_user_id,
+            User.role == "guide",
+            User.status == "active",
+        )
+    )
+    if not guide_result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Selected guide is not available")
+
+    # If listing provided, require it to be available for the selected guide.
     if req.listing_id:
         listing_result = await db.execute(
             select(GuideListing).where(GuideListing.id == req.listing_id)
         )
         listing = listing_result.scalar_one_or_none()
-        if listing:
-            quoted = float(listing.price_amount)
-            currency = listing.price_currency
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        if listing.guide_user_id != req.guide_user_id:
+            raise HTTPException(status_code=400, detail="Listing does not belong to the selected guide")
+        if listing.status != "published":
+            raise HTTPException(status_code=400, detail="Listing is not available")
+        quoted = float(listing.price_amount)
+        currency = listing.price_currency
 
     sr = ServiceRequest(
-        tourist_user_id=tourist_user_id,
+        tourist_user_id=current_user.id,
         guide_user_id=req.guide_user_id,
         listing_id=req.listing_id,
         service_date=str(req.service_date),
@@ -55,17 +73,17 @@ async def create_service_request(
 
 @router.get("/mine")
 async def list_my_requests(
-    user_id: str = Query(...), role: str = Query("tourist"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if role == "guide":
+    if current_user.role == "guide":
         result = await db.execute(
-            select(ServiceRequest).where(ServiceRequest.guide_user_id == user_id)
+            select(ServiceRequest).where(ServiceRequest.guide_user_id == current_user.id)
             .order_by(ServiceRequest.created_at.desc()).limit(50)
         )
     else:
         result = await db.execute(
-            select(ServiceRequest).where(ServiceRequest.tourist_user_id == user_id)
+            select(ServiceRequest).where(ServiceRequest.tourist_user_id == current_user.id)
             .order_by(ServiceRequest.created_at.desc()).limit(50)
         )
     return [
@@ -80,8 +98,13 @@ async def list_my_requests(
 
 
 @router.put("/{request_id}/accept")
-async def accept_request(request_id: str, guide_user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == guide_user_id))
+async def accept_request(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["guide"])
+    result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == current_user.id))
     sr = result.scalar_one_or_none()
     if not sr: raise HTTPException(status_code=404, detail="Request not found")
     sr.status = "accepted"
@@ -90,8 +113,13 @@ async def accept_request(request_id: str, guide_user_id: str = Query(...), db: A
 
 
 @router.put("/{request_id}/decline")
-async def decline_request(request_id: str, guide_user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == guide_user_id))
+async def decline_request(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["guide"])
+    result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == current_user.id))
     sr = result.scalar_one_or_none()
     if not sr: raise HTTPException(status_code=404, detail="Request not found")
     sr.status = "cancelled_by_guide"
@@ -100,12 +128,17 @@ async def decline_request(request_id: str, guide_user_id: str = Query(...), db: 
 
 
 @router.put("/{request_id}/met")
-async def mark_as_met(request_id: str, guide_user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
+async def mark_as_met(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Guide marks that they have met the tourist. This enables the tourist to write a review."""
+    ensure_role(current_user, ["guide"])
     result = await db.execute(
         select(ServiceRequest).where(
             ServiceRequest.id == request_id,
-            ServiceRequest.guide_user_id == guide_user_id
+            ServiceRequest.guide_user_id == current_user.id
         )
     )
     sr = result.scalar_one_or_none()

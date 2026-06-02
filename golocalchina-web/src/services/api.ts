@@ -77,7 +77,17 @@ export const authApi = {
 };
 
 export const serviceRequestApi = {
-  create: (data: { listing_id: string; service_date: string; party_size: number; language: string; tourist_notes?: string }) =>
+  create: (data: {
+    guide_user_id: string;
+    listing_id?: string | null;
+    service_date: string;
+    service_time_hour?: number | null;
+    party_size: number;
+    language: string;
+    tourist_notes?: string;
+    quoted_amount?: number;
+    quoted_currency?: string;
+  }) =>
     api.post('/service-requests', data).then(r => r.data),
   listMine: () =>
     api.get('/service-requests/mine').then(r => r.data),

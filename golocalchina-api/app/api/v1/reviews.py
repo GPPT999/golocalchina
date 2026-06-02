@@ -2,9 +2,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.booking import ServiceRequest, Review
-from app.models.user import GuideProfile, TouristProfile
+from app.models.user import GuideProfile, TouristProfile, User
 from app.schemas.review import CreateReview, GuideReply, ReviewResponse, ReviewStats
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_review(
     req: CreateReview,
-    reviewer_user_id: str = Query(..., description="Tourist user ID"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Tourist submits a review for a guide.
@@ -23,11 +24,12 @@ async def create_review(
     - Service request status must be 'met' (guide marked 'We have met')
     - Tourist cannot review the same service request twice
     """
+    ensure_role(current_user, ["tourist"])
     # Verify service request exists and belongs to this tourist
     sr_result = await db.execute(
         select(ServiceRequest).where(
             ServiceRequest.id == req.service_request_id,
-            ServiceRequest.tourist_user_id == reviewer_user_id
+            ServiceRequest.tourist_user_id == current_user.id
         )
     )
     sr = sr_result.scalar_one_or_none()
@@ -45,7 +47,7 @@ async def create_review(
     existing = await db.execute(
         select(Review).where(
             Review.service_request_id == req.service_request_id,
-            Review.reviewer_user_id == reviewer_user_id
+            Review.reviewer_user_id == current_user.id
         )
     )
     if existing.scalar_one_or_none():
@@ -54,7 +56,7 @@ async def create_review(
     # Create review
     review = Review(
         service_request_id=req.service_request_id,
-        reviewer_user_id=reviewer_user_id,
+        reviewer_user_id=current_user.id,
         target_user_id=sr.guide_user_id,
         stars=req.stars,
         text=req.text,
@@ -168,7 +170,7 @@ async def get_guide_reviews(
 async def guide_reply_to_review(
     review_id: str,
     req: GuideReply,
-    guide_user_id: str = Query(..., description="Guide user ID"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Guide replies to a review.
@@ -179,6 +181,7 @@ async def guide_reply_to_review(
     - Guide can only reply once (can update existing reply)
     """
     from datetime import datetime, timezone
+    ensure_role(current_user, ["guide"])
     
     # Get review
     review_result = await db.execute(
@@ -189,7 +192,7 @@ async def guide_reply_to_review(
         raise HTTPException(status_code=404, detail="Review not found")
     
     # Verify guide is the target
-    if review.target_user_id != guide_user_id:
+    if review.target_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Can only reply to reviews about you")
     
     # Update reply
@@ -207,22 +210,21 @@ async def guide_reply_to_review(
 
 @router.get("/mine")
 async def get_my_reviews(
-    user_id: str = Query(...),
-    role: str = Query("tourist", description="tourist or guide"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get reviews written by tourist or received by guide."""
-    if role == "guide":
+    if current_user.role == "guide":
         result = await db.execute(
             select(Review)
-            .where(Review.target_user_id == user_id)
+            .where(Review.target_user_id == current_user.id)
             .order_by(Review.created_at.desc())
             .limit(50)
         )
     else:
         result = await db.execute(
             select(Review)
-            .where(Review.reviewer_user_id == user_id)
+            .where(Review.reviewer_user_id == current_user.id)
             .order_by(Review.created_at.desc())
             .limit(50)
         )

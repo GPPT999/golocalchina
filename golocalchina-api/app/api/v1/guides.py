@@ -76,8 +76,25 @@ async def get_guide_detail(guide_id: str, db: AsyncSession = Depends(get_db)):
         "wechat_pay_qr_url": guide.wechat_pay_qr_url,
         "payment_note": guide.payment_note,
         "listings": [
-            {"id": l.id, "title": l.title, "summary": l.summary, "city": l.city,
-             "price_amount": float(l.price_amount), "price_currency": l.price_currency, "price_unit": l.price_unit}
+            {
+                "id": l.id,
+                "title": l.title,
+                "summary": l.summary,
+                "description_md": l.description_md,
+                "city": l.city,
+                "languages": l.languages if isinstance(l.languages, list) else [],
+                "tags": l.tags if isinstance(l.tags, list) else [],
+                "price_amount": float(l.price_amount),
+                "price_currency": l.price_currency,
+                "price_unit": l.price_unit,
+                "max_group_size": l.max_group_size,
+                "cover_image_url": l.cover_image_url,
+                "images": l.images if isinstance(l.images, list) else [],
+                "map_links": l.map_links if isinstance(l.map_links, list) else [],
+                "views": l.views or 0,
+                "likes": l.likes or 0,
+                "created_at": l.created_at,
+            }
             for l in listings
         ],
     }

@@ -4,8 +4,10 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.listing import GuideListing
+from app.models.user import User
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -44,10 +46,15 @@ class UpdateListing(BaseModel):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_listing(guide_user_id: str, req: CreateListing, db: AsyncSession = Depends(get_db)):
+async def create_listing(
+    req: CreateListing,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Create a new guide service listing."""
+    ensure_role(current_user, ["guide"])
     listing = GuideListing(
-        guide_user_id=guide_user_id,
+        guide_user_id=current_user.id,
         title=req.title, summary=req.summary, description_md=req.description_md,
         city=req.city, languages=req.languages,
         price_amount=req.price_amount, price_currency=req.price_currency, price_unit=req.price_unit,
@@ -61,10 +68,14 @@ async def create_listing(guide_user_id: str, req: CreateListing, db: AsyncSessio
 
 
 @router.get("/mine")
-async def list_my_listings(guide_user_id: str, db: AsyncSession = Depends(get_db)):
+async def list_my_listings(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get all listings for a guide."""
+    ensure_role(current_user, ["guide"])
     result = await db.execute(
-        select(GuideListing).where(GuideListing.guide_user_id == guide_user_id)
+        select(GuideListing).where(GuideListing.guide_user_id == current_user.id)
         .order_by(GuideListing.created_at.desc())
     )
     listings = result.scalars().all()
@@ -79,9 +90,15 @@ async def list_my_listings(guide_user_id: str, db: AsyncSession = Depends(get_db
 
 
 @router.put("/{listing_id}")
-async def update_listing(listing_id: str, guide_user_id: str, req: UpdateListing, db: AsyncSession = Depends(get_db)):
+async def update_listing(
+    listing_id: str,
+    req: UpdateListing,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["guide"])
     result = await db.execute(
-        select(GuideListing).where(GuideListing.id == listing_id, GuideListing.guide_user_id == guide_user_id)
+        select(GuideListing).where(GuideListing.id == listing_id, GuideListing.guide_user_id == current_user.id)
     )
     listing = result.scalar_one_or_none()
     if not listing:
@@ -93,9 +110,14 @@ async def update_listing(listing_id: str, guide_user_id: str, req: UpdateListing
 
 
 @router.delete("/{listing_id}")
-async def delete_listing(listing_id: str, guide_user_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_listing(
+    listing_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ensure_role(current_user, ["guide"])
     result = await db.execute(
-        select(GuideListing).where(GuideListing.id == listing_id, GuideListing.guide_user_id == guide_user_id)
+        select(GuideListing).where(GuideListing.id == listing_id, GuideListing.guide_user_id == current_user.id)
     )
     listing = result.scalar_one_or_none()
     if not listing:
@@ -106,7 +128,11 @@ async def delete_listing(listing_id: str, guide_user_id: str, db: AsyncSession =
 
 
 @router.post("/{listing_id}/like")
-async def like_listing(listing_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
+async def like_listing(
+    listing_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Like a listing (toggle)."""
     result = await db.execute(
         select(GuideListing).where(GuideListing.id == listing_id)
@@ -122,7 +148,11 @@ async def like_listing(listing_id: str, user_id: str, db: AsyncSession = Depends
 
 
 @router.post("/{listing_id}/unlike")
-async def unlike_listing(listing_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
+async def unlike_listing(
+    listing_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Unlike a listing (toggle)."""
     result = await db.execute(
         select(GuideListing).where(GuideListing.id == listing_id)

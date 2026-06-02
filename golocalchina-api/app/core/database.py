@@ -66,7 +66,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def create_tables():
     """Create all tables — used on startup."""
     from app.models.base import Base
-    from app.models import user, listing, booking  # noqa: F401
+    from app.models import user, listing, booking, compliance  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print(f"[DB] Tables created. URL: {db_url}")

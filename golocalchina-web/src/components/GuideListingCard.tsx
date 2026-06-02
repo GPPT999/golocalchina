@@ -82,7 +82,6 @@ export default function GuideListingCard({ listing }: Props) {
 
     const stored = localStorage.getItem('glc_user');
     if (!stored) return;
-    const user = JSON.parse(stored);
 
     setLiking(true);
     const likedIds = getLikedIds();
@@ -91,13 +90,13 @@ export default function GuideListingCard({ listing }: Props) {
     try {
       if (wasLiked) {
         // Unlike
-        const res = await api.post(`/listings/${listing.id}/unlike?user_id=${user.id}`);
+        const res = await api.post(`/listings/${listing.id}/unlike`);
         setLikeCount(res.data.likes_count);
         likedIds.delete(listing.id);
         setLiked(false);
       } else {
         // Like
-        const res = await api.post(`/listings/${listing.id}/like?user_id=${user.id}`);
+        const res = await api.post(`/listings/${listing.id}/like`);
         setLikeCount(res.data.likes_count);
         likedIds.add(listing.id);
         setLiked(true);

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.auth import ensure_role, get_current_user
 from app.core.database import get_db
 from app.models.post import TouristPost, PostLike
 from app.models.user import User, TouristProfile
@@ -19,13 +20,14 @@ class CreatePost(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_post(
-    author_user_id: str = Query(...),
-    req: CreatePost = ...,
+    req: CreatePost,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new tourist post."""
+    ensure_role(current_user, ["tourist"])
     post = TouristPost(
-        author_user_id=author_user_id,
+        author_user_id=current_user.id,
         title=req.title,
         content=req.content,
         images=req.images,
@@ -98,6 +100,18 @@ async def list_posts(
     return {"posts": page_posts, "total": total, "page": page, "per_page": per_page}
 
 
+@router.get("/liked")
+async def list_liked_posts(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List post IDs liked by the authenticated user."""
+    result = await db.execute(
+        select(PostLike.post_id).where(PostLike.user_id == current_user.id)
+    )
+    return {"liked_post_ids": [row[0] for row in result.all()]}
+
+
 @router.get("/{post_id}")
 async def get_post(post_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single post with author info. Increments view count."""
@@ -131,7 +145,7 @@ async def get_post(post_id: str, db: AsyncSession = Depends(get_db)):
 @router.post("/{post_id}/like")
 async def like_post(
     post_id: str,
-    user_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Like or unlike a post. Toggles like status."""
@@ -147,7 +161,7 @@ async def like_post(
     like_result = await db.execute(
         select(PostLike).where(
             PostLike.post_id == post_id,
-            PostLike.user_id == user_id,
+            PostLike.user_id == current_user.id,
         )
     )
     existing_like = like_result.scalar_one_or_none()
@@ -160,7 +174,7 @@ async def like_post(
         return {"liked": False, "like_count": post.like_count}
     else:
         # Like
-        new_like = PostLike(post_id=post_id, user_id=user_id)
+        new_like = PostLike(post_id=post_id, user_id=current_user.id)
         db.add(new_like)
         post.like_count = (post.like_count or 0) + 1
         await db.flush()
@@ -170,14 +184,14 @@ async def like_post(
 @router.get("/{post_id}/liked")
 async def check_liked(
     post_id: str,
-    user_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Check if user has liked a post."""
     result = await db.execute(
         select(PostLike).where(
             PostLike.post_id == post_id,
-            PostLike.user_id == user_id,
+            PostLike.user_id == current_user.id,
         )
     )
     return {"liked": result.scalar_one_or_none() is not None}
@@ -186,14 +200,14 @@ async def check_liked(
 @router.put("/{post_id}/done")
 async def mark_post_done(
     post_id: str,
-    author_user_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Mark a post as done. Only the author can do this."""
     result = await db.execute(
         select(TouristPost).where(
             TouristPost.id == post_id,
-            TouristPost.author_user_id == author_user_id,
+            TouristPost.author_user_id == current_user.id,
         )
     )
     post = result.scalar_one_or_none()
@@ -208,14 +222,14 @@ async def mark_post_done(
 @router.delete("/{post_id}")
 async def delete_post(
     post_id: str,
-    author_user_id: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a post. Only the author can do this."""
     result = await db.execute(
         select(TouristPost).where(
             TouristPost.id == post_id,
-            TouristPost.author_user_id == author_user_id,
+            TouristPost.author_user_id == current_user.id,
         )
     )
     post = result.scalar_one_or_none()
