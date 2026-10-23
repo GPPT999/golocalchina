@@ -261,3 +261,44 @@ async def test_authenticated_user_can_list_liked_post_ids(
 
     assert liked_resp.status_code == 200
     assert liked_resp.json()["liked_post_ids"] == [post.id]
+
+
+@pytest.mark.parametrize("action", ["accept", "decline"])
+@pytest.mark.asyncio
+async def test_completed_request_cannot_return_to_an_earlier_state(
+    action: str,
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    tourist = await make_user(
+        db_session,
+        email=f"completed-{action}-tourist@test.com",
+        role="tourist",
+        display_name="Tourist",
+    )
+    guide = await make_user(
+        db_session,
+        email=f"completed-{action}-guide@test.com",
+        role="guide",
+        display_name="Guide",
+    )
+    request = ServiceRequest(
+        tourist_user_id=tourist.id,
+        guide_user_id=guide.id,
+        service_date="2026-06-12",
+        party_size=2,
+        language="en",
+        quoted_amount=100,
+        quoted_currency="CNY",
+        status="met",
+    )
+    db_session.add(request)
+    await db_session.flush()
+
+    response = await client.put(
+        f"/api/v1/service-requests/{request.id}/{action}",
+        headers=auth_headers(guide),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Can only update pending requests"

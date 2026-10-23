@@ -119,6 +119,8 @@ async def accept_request(
     result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == current_user.id))
     sr = result.scalar_one_or_none()
     if not sr: raise HTTPException(status_code=404, detail="Request not found")
+    if sr.status != "pending":
+        raise HTTPException(status_code=400, detail="Can only update pending requests")
     sr.status = "accepted"
     await db.flush()
     return {"message": "Request accepted"}
@@ -134,6 +136,8 @@ async def decline_request(
     result = await db.execute(select(ServiceRequest).where(ServiceRequest.id == request_id, ServiceRequest.guide_user_id == current_user.id))
     sr = result.scalar_one_or_none()
     if not sr: raise HTTPException(status_code=404, detail="Request not found")
+    if sr.status != "pending":
+        raise HTTPException(status_code=400, detail="Can only update pending requests")
     sr.status = "cancelled_by_guide"
     await db.flush()
     return {"message": "Request declined"}

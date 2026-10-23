@@ -140,8 +140,8 @@ async def test_explore_listings_with_city(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_explore_listing_detail_not_found(client: AsyncClient):
     resp = await client.get("/api/v1/explore/listings/nonexistent-id")
-    assert resp.status_code == 200
-    assert resp.json().get("error") == "not_found"
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Listing not found"
 
 
 # ============================================================

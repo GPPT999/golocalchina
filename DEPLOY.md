@@ -1,13 +1,13 @@
 # GoLocalChina — Deployment Guide (Vercel + Railway)
 
-**Cost: $0/month** on free tiers. HTTPS included. Custom domain supported.
+Costs depend on the current Vercel and Railway plans. HTTPS is included.
 
 ---
 
 ## Architecture
 
 This project uses a **unified backend** (`golocalchina-api/`) that supports:
-- **SQLite** for development and demo deployments (Railway free tier)
+- **SQLite** for development and the current Railway deployment
 - **PostgreSQL** for production deployments
 - **Argon2id** password hashing (OWASP recommended)
 - **PyJWT** for JWT tokens (replaces unmaintained python-jose)
@@ -19,7 +19,7 @@ This project uses a **unified backend** (`golocalchina-api/`) that supports:
 
 1. Go to [railway.app](https://railway.app) → Sign up with GitHub
 2. Click **"New Project"** → **"Deploy from GitHub repo"**
-3. Select `Ilovecodinghhh/golocalchina`
+3. Select `GPPT999/golocalchina`
 4. Railway will auto-detect — set these:
    - **Root Directory:** `golocalchina-api`
    - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
@@ -27,17 +27,17 @@ This project uses a **unified backend** (`golocalchina-api/`) that supports:
    ```
    JWT_SECRET_KEY=<generate a random 64-char string>
    CORS_ORIGINS=https://golocalchina.vercel.app
-   ANTHROPIC_API_KEY=<your-anthropic-api-key>
+   DATABASE_URL=sqlite+aiosqlite:////data/golocalchina.db
    ```
-6. Click **Deploy** → Railway gives you a URL like `golocalchina-api-production.up.railway.app`
-7. Test: visit `https://YOUR_RAILWAY_URL/health` — should show `{"status":"ok"}`
+6. Mount a persistent Railway volume at `/data`.
+7. Deploy and verify `https://golocalchina-production-6f97.up.railway.app/health`.
 
 ---
 
 ## Step 2: Deploy Frontend to Vercel (5 min)
 
 1. Go to [vercel.com](https://vercel.com) → Sign up with GitHub
-2. Click **"Add New Project"** → Import `Ilovecodinghhh/golocalchina`
+2. Click **"Add New Project"** → Import `GPPT999/golocalchina`
 3. Configure:
    - **Root Directory:** `golocalchina-web`
    - **Framework:** Vite
@@ -101,10 +101,9 @@ Tests cover:
 
 ## CI/CD
 
-GitHub Actions automatically runs tests on every push and PR:
-- Python 3.11 and 3.12 matrix
-- Ruff linting
-- Pytest with coverage reporting
+Vercel and Railway are connected to `GPPT999/golocalchina`. Pushes to `main`
+trigger their configured deployments. Run the backend tests and frontend build
+before pushing because this repository does not include a GitHub Actions workflow.
 
 ---
 
@@ -112,7 +111,7 @@ GitHub Actions automatically runs tests on every push and PR:
 
 Your live URLs:
 - **Frontend:** `https://golocalchina.vercel.app` (or your custom domain)
-- **Backend API:** `https://YOUR_RAILWAY_URL.up.railway.app/health`
-- **API Docs:** `https://YOUR_RAILWAY_URL.up.railway.app/docs`
+- **Backend API:** `https://golocalchina-production-6f97.up.railway.app/health`
+- **API Docs:** `https://golocalchina-production-6f97.up.railway.app/docs`
 
-Both have HTTPS, auto-deploy on git push, and cost $0.
+Both have HTTPS and auto-deploy on git push.

@@ -1,6 +1,6 @@
 """Public explore endpoint — search published listings with guide info."""
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
@@ -96,7 +96,7 @@ async def get_listing_detail(listing_id: str, db: AsyncSession = Depends(get_db)
     )
     listing = result.scalar_one_or_none()
     if not listing:
-        return {"error": "not_found"}
+        raise HTTPException(status_code=404, detail="Listing not found")
 
     # Increment view count
     listing.views = (listing.views or 0) + 1
